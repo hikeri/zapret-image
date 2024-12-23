@@ -1,0 +1,452 @@
+# AntiDPI script v3.3 by MIR371(Fenrir-0xFF) based on nfqws v69.8 
+# Script support: https://github.com/bol-van/zapret/discussions/872 
+# Full information about zapret/nfqws https://github.com/bol-van/zapret 
+# For openwrt opkg install kmod-nft-queue kmod-nfnetlink-queue and set dpi_list_path="/etc"; 
+
+#Main config
+dpi_list_path="/sdcard/Android"; #Path for host lists and desync fake bin files (for Android set "/sdcard/Android", for OpenWRT set "/etc")
+uselist="1"; #Enable or disable auto host list
+debug="0"; #Enable/Disable debug log to file 
+
+#Names: 
+dpi_list="DPI_list.txt"; #Url list
+dpi_ignore="DPI_ignore.txt"; #Ignore url list
+dpi_config="DPI_config.txt"; #External config
+dpi_list_debug="DPI_list_debug.txt"; #AutoHostlist debug log 
+nftname="inet zapret"; #Name table in nftables
+iptname="mangle"; #Name table in iptables
+
+#Options for auto hostlist (if uselist="1";)
+AUTOHOSTLIST_DEBUGLOG=0
+#AUTOHOSTLIST_RETRANS_THRESHOLD=3
+#AUTOHOSTLIST_FAIL_THRESHOLD=3
+#AUTOHOSTLIST_FAIL_TIME=60
+
+###################
+#Desync config 
+DesyncHTTP="--filter-tcp=80 --methodeol <HOSTLIST>";
+
+Desync1="--new --filter-tcp=443 --wssize=1:6 --dpi-desync=fake,split2 --dpi-desync-split-pos=1,midsld --dpi-desync-repeats=4 --dpi-desync-ttl=4 --dpi-desync-fake-tls=0x16030102 --hostlist-domains=youtube.com,googlevideo.com,ytimg.com,ggpht.com,youtubei.googleapis.com"; #YouTube
+Desync2="--new --filter-udp=50000-50099 --dpi-desync=fake --dpi-desync-any-protocol --dpi-desync-cutoff=n2 --dpi-desync-fake-quic=0xC30000000108"; #Discord
+
+#Desync3="--new ";
+#Desync4="--new ";
+#Desync5="--new ";
+
+DesyncHTTPS="--new --filter-tcp=443 --wssize=1:6 --dpi-desync=disorder2 --dpi-desync-split-pos=1,midsld <HOSTLIST>";
+DesyncQUIC="--new --filter-udp=443,6969 --dpi-desync=fake --dpi-desync-repeats=6 --dpi-desync-fake-quic=0xC30000000108 <HOSTLIST_NOAUTO>";
+
+#NFQWS_OPT=""; #For full config
+###################
+
+#Import sites to hostlist 
+importHostList="
+rutracker.org
+rutracker.net
+rutracker.cc
+torrent.by
+nnmclub.to
+lafa.site
+baza-knig.ink
+discord.com
+discord.gg
+discord.co
+discord.dev
+discord.new
+discord.gift
+discord.app
+discord.media
+discordapp.com
+discordapp.net
+discordcdn.com
+discordstatus.com
+dis.gd
+discord-attachments-uploads-prd.storage.googleapis.com
+";
+
+
+#######END CONFIG#######
+
+#Add site to hostlist file
+addHlist() {
+echo "Import hosts list";
+if ! [ -e "$dpi_list_path/$dpi_list" ]; 
+then 
+echo -n "" > "$dpi_list_path/$dpi_list"; 
+chmod 666 "$dpi_list_path/$dpi_list"; 
+fi;
+
+if [ "$uselist" != "1" ]; 
+then
+echo "Warning: use hoslist is disabled"; 
+fi; 
+for site in $1; 
+do 
+if [ "$(grep -Ec "^$site" "$dpi_list_path/$dpi_list")" == "0" ]; 
+then 
+echo "$site" >> $dpi_list_path/$dpi_list; 
+fi; 
+done; 
+sleep 1; 
+}
+
+#Start service
+if [ "$1" == "start" ]; 
+then 
+echo "Starting AntiDPI service..."; 
+
+#Check nfqws running 
+if [ "$(pidof nfqws)" ]; 
+then 
+echo "Error - service is runned"; 
+echo "Run $(basename $0) stop and try start again"; 
+exit; 
+fi;
+
+#Collecting all Desync to one
+if ! [ -e "$dpi_list_path/$dpi_config" ]; 
+then
+if ! [ -n "$NFQWS_OPT" ]; 
+then 
+NFQWS_OPT="$(echo $DesyncHTTP $Desync1 $Desync2 $Desync3 $Desync4 $Desync5 $DesyncHTTPS $DesyncQUIC | sed 's/  / /g')";
+fi;
+
+#Auto hostlist  
+if [ "$uselist" == "1" ]; 
+then 
+echo "Using auto hostlist";
+if ! [ -e "$dpi_list_path/$dpi_ignore" ]; 
+then 
+echo -n "" > "$dpi_list_path/$dpi_ignore"; 
+chmod 666 "$dpi_list_path/$dpi_ignore"; 
+fi; 
+HOSTLIST="--hostlist-auto=$dpi_list_path/$dpi_list --hostlist-exclude=$dpi_list_path/$dpi_ignore"; 
+HOSTLIST_NOAUTO="--hostlist=$dpi_list_path/$dpi_list --hostlist-exclude=$dpi_list_path/$dpi_ignore"; 
+if [ "AUTOHOSTLIST_DEBUGLOG" == "1" ];
+then 
+HOSTLIST="$HOSTLIST --hostlist-auto-debug=$dpi_list_path/$dpi_list_debug";
+fi 
+
+if [ -n "$AUTOHOSTLIST_RETRANS_THRESHOLD" ]; 
+then
+HOSTLIST="$HOSTLIST --hostlist-auto-retrans-threshold=$AUTOHOSTLIST_RETRANS_THRESHOLD";
+fi
+
+if [ -n "$AUTOHOSTLIST_FAIL_THRESHOLD" ]; 
+then
+HOSTLIST="$HOSTLIST --hostlist-auto-fail-threshold=$AUTOHOSTLIST_FAIL_THRESHOLD";
+fi
+
+if [ -n "$AUTOHOSTLIST_FAIL_TIME" ]; 
+then
+HOSTLIST="$HOSTLIST --hostlist-auto-fail-time=$AUTOHOSTLIST_FAIL_TIME";
+fi
+else 
+HOSTLIST=""; 
+HOSTLIST_NOAUTO="";
+fi
+
+#Fix config <HOSTLIST> -> $HOSTLIST
+NFQWS_OPT="$(echo $NFQWS_OPT | sed -e "s|<HOSTLIST_NOAUTO>|$HOSTLIST_NOAUTO|g" -e "s|<HOSTLIST>|$HOSTLIST|g")";
+
+if [ "$debug" == "1" ]; 
+then 
+echo "Debug all Desync: $NFQWS_OPT" > $dpi_list_path/DPI_logS.txt; 
+fi;
+fi;
+
+#Import internal hostlist
+if ! [ -e "$dpi_list_path/$dpi_list" ] && [ "$uselist" == "1" ]; 
+then 
+addHlist "$importHostList";
+fi;
+
+#Custom interface
+if [ -n "$2" ]; 
+then 
+iface=$2; 
+echo "Starting for interface $iface"; 
+if ! [ -e "/proc/net/ip_tables_targets" ]; 
+then 
+iifnm="iifname $iface"; 
+oifnm="oifname $iface";
+else 
+iifnm="-i $iface"; 
+oifnm="-o $iface"; 
+fi;
+else 
+iifnm=""; 
+oifnm=""; 
+echo "Starting for all interfaces"; 
+fi; 
+
+#External config
+if [ -e "$dpi_list_path/$dpi_config" ]; 
+then 
+NFQWS_PORTS_TCP="$(cat $dpi_list_path/$dpi_config | grep -oE 'filter-tcp=[0-9,-]+' | sed -e 's/.*=//g' -e 's/,/\n/g' | sort -un)";
+NFQWS_PORTS_UDP="$(cat $dpi_list_path/$dpi_config | grep -oE 'filter-udp=[0-9,-]+' | sed -e 's/.*=//g' -e 's/,/\n/g' | sort -un)";
+
+if [ "$(cat $dpi_list_path/$dpi_config | grep -c 'badsum')" != "0" ]; 
+then 
+NFQWS_OPT="badsum";
+fi;
+
+if [ "$(cat $dpi_list_path/$dpi_config | grep -Ec '<HOSTLIST_NOAUTO>|<HOSTLIST>|hostlist-auto')" != "0" ];
+then
+uselist="1";
+sed -i "s|<HOSTLIST_NOAUTO>|$HOSTLIST_NOAUTO|g" "$dpi_list_path/$dpi_config"
+sed -i "s|<HOSTLIST>|$HOSTLIST|g" "$dpi_list_path/$dpi_config"
+else
+uselist="0";
+fi;
+fi;
+
+
+#NetFilter rules
+if [ "$uselist" == "1" ]; 
+then 
+sysctl net.netfilter.nf_conntrack_tcp_be_liberal=1 > /dev/null; 
+fi; 
+
+if [ "$(echo $NFQWS_OPT | grep -c badsum)" != "0" ]; 
+then 
+sysctl net.netfilter.nf_conntrack_checksum=0 > /dev/null; 
+fi;
+
+if [ "$(echo $NFQWS_OPT | grep -Ec 'rst|rstack')" != "0" ]; 
+then 
+net.netfilter.nf_conntrack_tcp_ignore_invalid_rst=1 > /dev/null; 
+fi;
+
+
+#Collecting ports
+if ! [ -e "$dpi_list_path/$dpi_config" ]; 
+then 
+NFQWS_PORTS_TCP="$(echo $NFQWS_OPT | grep -oE 'filter-tcp=[0-9,-]+' | sed -e 's/.*=//g' -e 's/,/\n/g' | sort -un)";
+NFQWS_PORTS_UDP="$(echo $NFQWS_OPT | grep -oE 'filter-udp=[0-9,-]+' | sed -e 's/.*=//g' -e 's/,/\n/g' | sort -un)";
+fi;
+if [ "$debug" == "1" ]; 
+then 
+echo "Debug tcp ports: $NFQWS_PORTS_TCP" >> $dpi_list_path/DPI_logS.txt;
+echo "Debug udp ports: $NFQWS_PORTS_UDP" >> $dpi_list_path/DPI_logS.txt;
+fi;
+
+
+#Add port to iptables 
+iptAdd() { 
+if [ "$debug" == "1" ]; 
+then 
+echo "Debug ipt_Add tcp/udp: $1 PortNum: $2" >> $dpi_list_path/DPI_logS.txt; 
+fi;
+
+ippo=$(echo "$oifnm -p $1 $iMportD $2 $iCBo $iMark" | sed 's/  / /g');
+iptables -t $iptname -I POSTROUTING $ippo -j NFQUEUE --queue-num 200 --queue-bypass
+if [ "$uselist" == "1" ]; 
+then 
+ippre=$(echo "$iifnm -p $1 $iMportS $2 $iCBr $iMark" | sed 's/  / /g');
+iptables -t $iptname -I PREROUTING $ippre -j NFQUEUE --queue-num 200 --queue-bypass
+fi;
+}
+
+#multiport to port
+iptMultiPort() { #tcp/udp; ports
+if [ "$(echo $iMportD | grep -c multiport)" != "0" ]; 
+then 
+iptAdd "$1" "$(echo $2 | sed -e 's/ /,/g' -e 's/-/:/g')"; #If full iptables
+else 
+for current_port in $2; 
+do
+if [ "$(echo $current_port | grep -c '-')" != "0" ]; 
+then 
+for i in $(seq $(echo $current_port | sed 's/-.*//') $(echo $current_port | sed 's/.*-//')); 
+do 
+iptAdd "$1" "$i"; 
+done 
+else 
+iptAdd "$1" "$current_port"; 
+fi; 
+done; 
+fi;
+}
+
+#Using Nftables
+if ! [ -e "/proc/net/ip_tables_targets" ]; 
+then 
+echo "Using nftables";
+nft create table $nftname; 
+nft add chain $nftname post "{type filter hook postrouting priority mangle;}";
+if [ -n "$NFQWS_PORTS_TCP" ];
+then
+nft add rule $nftname post $oifnm tcp dport "{ $(echo $NFQWS_PORTS_TCP | sed 's/ /,/g') }" ct original packets 1-12 meta mark and 0x40000000 == 0 queue num 200 bypass;
+fi 
+if [ -n "$NFQWS_PORTS_UDP" ];
+then
+nft add rule $nftname post $oifnm udp dport "{ $(echo $NFQWS_PORTS_UDP | sed 's/ /,/g') }" ct original packets 1-12 meta mark and 0x40000000 == 0 queue num 200 bypass;
+fi
+if [ "$uselist" == "1" ]; then 
+nft add chain $nftname pre "{type filter hook prerouting priority filter;}";
+if [ -n "$NFQWS_PORTS_TCP" ];
+then
+nft add rule $nftname pre $iifnm tcp sport "{ $(echo $NFQWS_PORTS_TCP | sed 's/ /,/g') }" ct reply packets 1-3 queue num 200 bypass;
+fi
+if [ -n "$NFQWS_PORTS_UDP" ];
+then
+nft add rule $nftname pre $iifnm udp sport "{ $(echo $NFQWS_PORTS_UDP | sed 's/ /,/g') }" ct reply packets 1-3 queue num 200 bypass;
+fi;
+fi; 
+
+#Debug nftables 
+if [ "$debug" == "1" ]; 
+then 
+echo "Debug nftales" >> $dpi_list_path/DPI_logS.txt; 
+nft list table $nftname >> $dpi_list_path/DPI_logS.txt; 
+fi;
+
+else 
+echo "Using iptables"; 
+if [ "$(cat /proc/net/ip_tables_targets | grep -c 'NFQUEUE')" == "0" ]; 
+then
+echo "Error - very bad iptables, script will not work"; 
+exit
+else
+
+#Check multiport support
+if [ "$(cat /proc/net/ip_tables_matches | grep -c 'multiport')" != "0" ]; 
+then 
+iMportS="-m multiport --sports"; 
+iMportD="-m multiport --dports"; 
+else 
+iMportS="--sport"; 
+iMportD="--dport"; 
+echo "skip multiport"; 
+fi;
+
+#Check connbytes support
+if [ "$(cat /proc/net/ip_tables_matches | grep -c 'connbytes')" != "0" ]; 
+then 
+iCBo="-m connbytes --connbytes-dir=original --connbytes-mode=packets --connbytes 1:12"; 
+iCBr="-m connbytes --connbytes-dir=reply --connbytes-mode=packets --connbytes 1:3"; 
+else 
+iCBo=""; 
+iCBr=""; 
+echo "skip connbytes"; 
+fi; 
+
+#Check mark support
+if [ "$(cat /proc/net/ip_tables_matches | grep -c 'mark')" != "0" ]; 
+then
+iMark="-m mark ! --mark 0x40000000/0x40000000"; 
+else 
+iMark=""; 
+echo "skip mark"; 
+fi; 
+
+if [ -n "$NFQWS_PORTS_TCP" ];
+then
+iptMultiPort "tcp" "$NFQWS_PORTS_TCP";
+fi
+if [ -n "$NFQWS_PORTS_UDP" ];
+then
+iptMultiPort "udp" "$NFQWS_PORTS_UDP";
+fi
+
+
+#Debug iptables 
+if [ "$debug" == "1" ]; 
+then 
+echo "Debug iptables" >> $dpi_list_path/DPI_logS.txt; 
+iptables -t $iptname -L >> $dpi_list_path/DPI_logS.txt; 
+fi;
+fi; 
+fi;
+
+#Starting nfqws
+if [ "$debug" == "1" ]; 
+then 
+ndebug="--debug=@$dpi_list_path/DPI_logN.txt"; 
+else 
+ndebug=""; 
+fi;
+echo "Starting nfqws"; 
+if [ -e "$dpi_list_path/$dpi_config" ]; 
+then 
+#Check nfqws main options in config 
+if [ "$(cat $dpi_list_path/$dpi_config | grep -c 'qnum=')" == "0" ];
+then
+sed -i "1s/^/$ndebug --daemon --uid=0:0 --qnum=200 \n/" "$dpi_list_path/$dpi_config"
+fi
+$(dirname $0)/nfqws @$dpi_list_path/$dpi_config 
+echo "Running with external config"; 
+else
+$(dirname $0)/nfqws "$ndebug" --daemon --uid=0:0 --qnum=200 $NFQWS_OPT 
+fi
+sleep 1 
+if [ "$(pidof nfqws)" ]; 
+then 
+echo "";
+echo "AntiDPI service enabled"; 
+else 
+echo "";
+echo "ERROR: nfqws is not running, check Desync config"; 
+fi;
+fi;
+
+#Stop service
+if [ "$1" == "stop" ]; 
+then
+if ! [ -e "/proc/net/ip_tables_targets" ]; 
+then
+nft delete table $nftname; 
+else 
+iptables -t $iptname -F PREROUTING; 
+iptables -t $iptname -F POSTROUTING; 
+fi; 
+kill "$(pidof nfqws)";
+if [ "$debug" == "1" ]; 
+then 
+echo "Stop service" >> $dpi_list_path/DPI_logS.txt; 
+fi;
+echo "AntiDPI service disabled"; 
+fi;
+
+#Import external hostlist
+if [ "$1" == "hosts" ]; 
+then
+if [ -e "$2" ]; 
+then 
+addHlist "$(cat $2)"; 
+echo "OK"; 
+else 
+echo "File error"; 
+fi; 
+fi;
+
+#Autostart on Magisk
+if [ "$1" == "autostart" ]; 
+then
+if [ "$2" == "0" ]; 
+then
+sed -i 's/AUTOSTART=".*"/AUTOSTART="false"/1' "/system/bin/service.sh";
+echo "Auto-start on Magisk disabled";
+elif [ "$2" == "1" ]; 
+then
+sed -i 's/AUTOSTART=".*"/AUTOSTART="true"/1' "/system/bin/service.sh";
+echo "Autostart on Magisk enabled"; 
+else echo "use autostart 1 or 0"; 
+fi; 
+fi;
+
+#Help info
+if [ -z "$1" ]; 
+then
+echo " Usage AntiDPI service: "; 
+echo "$(basename $0) start - Run AntiDPI for all interfaces";
+echo "$(basename $0) start interface - Run AntiDPI for custom interface"; 
+echo "$(basename $0) stop - Stop AntiDPI and remove tables rules"; 
+echo "";
+echo "$(basename $0) hosts file - Import hosts from file";
+echo "$(basename $0) autostart 1 - Enable autostart on Magisk";
+echo "$(basename $0) autostart 0 - Disable autostart on Magisk";
+echo "";
+echo " AntiDPI service based on bol-van/zapret/nfqws"; 
+fi; 

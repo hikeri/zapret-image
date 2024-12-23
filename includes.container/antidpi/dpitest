@@ -1,0 +1,231 @@
+#Dpitest script v3.3 
+#This analog zapret/blockcheck.sh for Android
+
+#Config 
+#############
+ResultFile="/sdcard/Android/DPI_methods.txt";
+TimeOutHTTP="3";
+TimeOutHTTPS="8";
+
+#Not blocked site, for test curl
+OkUrl="google.com"; 
+OkUrlIP="216.58.204.78"; 
+OkUrlKeyWord80="www";
+OkUrlKeyWord443="www";
+
+#Blocked site for test dpi 
+BUrl="nnmclub.to"; 
+BUrlIP="104.21.64.1,104.21.96.1,104.21.16.1,104.21.32.1";
+BUrlKeyWord80="cloudflare";
+BUrlKeyWord443="NNM-Club";
+#############
+
+echo "Start script"; 
+#Check nfqws
+if [ "$(nfqws | grep -c 'HOSTLIST')" == "0" ]; 
+then 
+echo "Error - cannot find nfqws";
+exit
+fi
+
+#Check curl
+if [ "$(curl -h | grep -c 'options')" == "0" ]; 
+then 
+echo "Error - cannot find curl";
+exit
+fi
+
+#Check dpi
+if [ "$(pidof nfqws)" ]; 
+then 
+echo "Error - dpi script is runned"; 
+echo "Run dpi stop and start dpitest again"; 
+exit 
+fi
+
+#Check resolv.conf
+if ! [ -e "/etc/resolv.conf" ]; then 
+echo "/etc/resolv.conf not found"; 
+fi 
+
+#Test curl connection for non blocked site
+echo "Testing curl connections";
+if [ "$(curl --max-time $TimeOutHTTP -s --resolve $OkUrl:80:$OkUrlIP http://$OkUrl | grep -c $OkUrlKeyWord80)" != "0" ]; 
+then
+echo "Curl HTTP connection OK";
+else 
+echo "Error - cannot open http://$OkUrl";
+exit
+fi
+
+if [ "$(curl --max-time $TimeOutHTTPS -ks --resolve $OkUrl:443:$OkUrlIP https://$OkUrl | grep -c $OkUrlKeyWord443)" != "0" ]; 
+then
+echo "Curl HTTPS connection OK";
+else 
+echo "Error - cannot open httpS://$OkUrl";
+exit
+fi
+
+
+#Custom interface
+if [ -n "$1" ]; 
+then 
+iface=$1; 
+echo "Starting for interface $iface"; 
+if ! [ -e "/proc/net/ip_tables_targets" ]; 
+then 
+iifnm="iifname $iface"; 
+oifnm="oifname $iface";
+else 
+iifnm="-i $iface"; 
+oifnm="-o $iface"; 
+fi;
+else 
+iifnm=""; 
+oifnm=""; 
+echo "Starting for all interfaces"; 
+fi; 
+
+
+#Add tables rules 
+if ! [ -e "/proc/net/ip_tables_targets" ]; #Using Nftables
+then 
+if ! [ -n "$1" ]; 
+then
+echo "WARNING: Device use Nftables, run $(basename $0) with wan interface";
+echo "example: $(basename $0) eth0.2";
+#exit
+fi;
+echo "Using nftables" > $ResultFile
+nft create table inet zapret; 
+nft add chain inet zapret post "{type filter hook postrouting priority mangle;}";
+nft add rule inet zapret post $oifnm tcp dport 80 ct original packets 1-12 meta mark and 0x40000000 == 0 queue num 200 bypass;
+nft add rule inet zapret post $oifnm tcp dport 443 ct original packets 1-12 meta mark and 0x40000000 == 0 queue num 200 bypass;
+else
+echo "Using iptables" > $ResultFile
+if [ "$(cat /proc/net/ip_tables_targets | grep -c 'NFQUEUE')" == "0" ]; 
+then
+echo "Error - iptables not support NFQUEUE, script will not work"; 
+exit
+else
+
+#Check multiport support
+if [ "$(cat /proc/net/ip_tables_matches | grep -c 'multiport')" != "0" ]; 
+then 
+echo "Iptables support multiport - Yes" >> $ResultFile
+else 
+echo "Iptables support multiport - No" >> $ResultFile
+fi;
+
+#Check connbytes support
+if [ "$(cat /proc/net/ip_tables_matches | grep -c 'connbytes')" != "0" ]; 
+then 
+echo "Iptables support connbytes - Yes" >> $ResultFile
+iCBo="-m connbytes --connbytes-dir=original --connbytes-mode=packets --connbytes 1:12"; 
+else 
+echo "Iptables support connbytes - No" >> $ResultFile
+iCBo=""; 
+fi; 
+
+#Check mark support
+if [ "$(cat /proc/net/ip_tables_matches | grep -c 'mark')" != "0" ]; 
+then
+echo "Iptables support mark - Yes" >> $ResultFile
+iMark="-m mark ! --mark 0x40000000/0x40000000"; 
+else 
+echo "Iptables support mark - No" >> $ResultFile
+iMark=""; 
+fi;
+
+#Add iptables rules 
+iptables -t mangle -I POSTROUTING $oifnm -p tcp --dport 80 $iCBo $iMark -j NFQUEUE --queue-num 200 --queue-bypass
+iptables -t mangle -I POSTROUTING $oifnm -p tcp --dport 443 $iCBo $iMark -j NFQUEUE --queue-num 200 --queue-bypass
+
+fi;
+fi;
+
+
+#Testing desync ttl
+for t in 8 6 4 2 1 ; 
+do
+nfqws --daemon --uid=0:0 --qnum=200 --dpi-desync=split --dpi-desync-ttl=$t 
+sleep 2
+if [ "$(curl --max-time $TimeOutHTTP -s --resolve $OkUrl:80:$OkUrlIP http://$OkUrl| grep -c $OkUrlKeyWord80)" != "0" ]; 
+then
+echo "desync-ttl $t OK";
+fooling="--dpi-desync-ttl=$t";
+kill "$(pidof nfqws)";
+break;
+else 
+echo "desync-ttl $t BAD";
+sleep 2
+fi
+kill "$(pidof nfqws)";
+done
+fooling="--dpi-desync-fooling=md5sig $fooling"
+
+
+#Testing desync methods function
+TestDesync () {
+echo "Testing methods  $1"
+nfqws --daemon --uid=0:0 --qnum=200 $1 $fooling 
+sleep 2
+#Test HTTPS
+if [ "$(curl --max-time $TimeOutHTTPS -ks --resolve $BUrl:443:$BUrlIP https://$BUrl | grep -c $BUrlKeyWord443)" != "0" ]; 
+then
+echo "HTTPS OK";
+echo -n 'DesyncHTTPS="--new --filter-tcp=443 ' >> $ResultFile; 
+echo -n "$1 $fooling "  >> $ResultFile; 
+echo '<HOSTLIST>";' >> $ResultFile; 
+
+else 
+echo "HTTPS BAD"; 
+fi;
+#Test HTTP
+if [ "$(curl --max-time $TimeOutHTTP -s --resolve $BUrl:80:$BUrlIP http://$BUrl| grep -c $BUrlKeyWord80)" != "0" ]; 
+then
+echo "HTTP OK";
+echo -n 'DesyncHTTP="--filter-tcp=80 ' >> $ResultFile; 
+echo -n "$1 $fooling "  >> $ResultFile; 
+echo '<HOSTLIST>";' >> $ResultFile; 
+else 
+echo "HTTP BAD"; 
+fi;
+
+kill "$(pidof nfqws)";
+}
+
+
+
+###########################################################################################################
+
+echo "Starting";
+for decync0 in none wssize syndata ; do
+for decync1 in none fake rst rstack ; do
+for decync2 in none split split2 disorder disorder2 ; do
+NFQWS_OPT="--dpi-desync=$decync0,$decync1,$decync2 ";
+if [ "$(echo $NFQWS_OPT | grep -c 'fake')" != "0" ]; then NFQWS_OPT="$NFQWS_OPT --dpi-desync-repeats=4 --dpi-desync-fake-tls=0x16030102"; fi;
+if [ "$(echo $NFQWS_OPT | grep -c 'split2')" != "0" ]; then NFQWS_OPT="$NFQWS_OPT --dpi-desync-split-pos=1,midsld"; fi;
+if [ "$(echo $NFQWS_OPT | grep -c 'disorder2')" != "0" ]; then NFQWS_OPT="$NFQWS_OPT --dpi-desync-split-pos=1,midsld"; fi;
+if [ "$(echo $NFQWS_OPT | grep -c 'syndata')" != "0" ]; then NFQWS_OPT="$NFQWS_OPT --dpi-desync-fake-syndata=0x0A"; fi;
+if [ "$(echo $NFQWS_OPT | grep -c 'wssize')" != "0" ]; then NFQWS_OPT="$(echo $NFQWS_OPT | sed 's/wssize,//g') --wssize=1:6"; fi;
+if [ "$(echo $NFQWS_OPT | grep -c 'dpi-desync=none,none,none')" != "0" ]; then NFQWS_OPT="--methodeol"; fi;
+if [ "$(echo $NFQWS_OPT | grep -c 'none')" != "0" ]; then NFQWS_OPT="$(echo $NFQWS_OPT | sed -e 's/,none//g' -e 's/none,//g' -e 's/none//g')"; fi;
+TestDesync "$NFQWS_OPT";
+done; done; done
+
+
+
+#################################################################################################
+#End script
+if ! [ -e "/proc/net/ip_tables_targets" ]; 
+then
+nft delete table inet zapret; 
+else 
+iptables -t mangle -F POSTROUTING;
+fi; 
+if [ "$(pidof nfqws)" ]; 
+then 
+kill "$(pidof nfqws)";
+fi;
+echo "End script"; 
