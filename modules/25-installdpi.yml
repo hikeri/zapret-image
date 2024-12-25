@@ -1,0 +1,14 @@
+name: install-debs
+type: shell
+commands:
+  - chmod +x /antidpi/service.sh
+  - chmod +x /antidpi/nfqws_x64
+  - chmod +x /antidpi/dpi
+  - chmod +x /antidpi/customize.sh
+  - mv /antidpi/service.sh /etc/init.d/antidpi-service
+  - mv /antidpi/nfqws_x64 /bin/nfqws
+  - mv /antidpi/dpi /bin/dpi
+  - rm -rf /antidpi
+  - curl -L -o /etc/DPI_list.txt https://github.com/1andrevich/Re-filter-lists/releases/latest/download/domains_all.lst
+  - update-rc.d antidpi-service defaults
+  - /bin/dpi start
