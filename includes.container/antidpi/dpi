@@ -5,7 +5,7 @@
 
 #Main config
 dpi_list_path="/etc"; #Path for host lists and desync fake bin files (for Android set "/sdcard/Android", for OpenWRT set "/etc")
-uselist="1"; #Enable or disable auto host list
+uselist="0"; #Enable or disable auto host list
 debug="0"; #Enable/Disable debug log to file 
 
 #Names: 
