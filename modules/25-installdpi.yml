@@ -10,5 +10,5 @@ commands:
   - mv /antidpi/dpi /bin/dpi
   - rm -rf /antidpi
   - curl -L -o /etc/DPI_list.txt https://github.com/1andrevich/Re-filter-lists/releases/latest/download/domains_all.lst
-  - update-rc.d antidpi-service defaults
   - /bin/dpi start
+  - update-rc.d antidpi-service defaults
