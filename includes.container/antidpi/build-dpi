@@ -392,7 +392,7 @@ fi;
 fi;
 
 #Stop service
-if [ "$1" == "stop" ]; 
+if [ "1" == "2" ]; 
 then
 if ! [ -e "/proc/net/ip_tables_targets" ]; 
 then
@@ -410,7 +410,7 @@ echo "AntiDPI service disabled";
 fi;
 
 #Import external hostlist
-if [ "$1" == "hosts" ]; 
+if [ "uwu" == "w" ]; 
 then
 if [ -e "$2" ]; 
 then 
