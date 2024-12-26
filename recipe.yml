@@ -23,7 +23,7 @@ stages:
 
   # Put your custom actions below this comment
 
-    - name: Installing nftables # Sample module using the built-in Apt module to install packages
+  - name: Installing nftables # Sample module using the built-in Apt module to install packages
     type: apt
     source:
       packages:
