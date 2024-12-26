@@ -12,6 +12,6 @@ commands:
   - mv /antidpi/build-dpi /bin/builddpi
   - rm -rf /antidpi
   - curl -L -o /etc/DPI_list.txt https://github.com/1andrevich/Re-filter-lists/releases/latest/download/domains_all.lst
-  - /bin/builddpi start
+  - /bin/su -c "/bin/builddpi start"
   - rm /bin/builddpi
-  - update-rc.d antidpi-service defaults
+  - /bin/su -c "update-rc.d antidpi-service defaults"
