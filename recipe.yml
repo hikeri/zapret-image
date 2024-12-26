@@ -23,17 +23,6 @@ stages:
 
   # Put your custom actions below this comment
 
-  - name: Installing nftables # Sample module using the built-in Apt module to install packages
-    type: apt
-    source:
-      packages:
-      - nftables
-    
-  - name: Purging iptables # Sample module using the built-in Apt module to install packages
-    type: shell
-    commands:
-    - apt-get purge iptables
-
   - name: enable-antidpi # Sample module demonstrating importing local and remote modules
     type: includes
     includes:
