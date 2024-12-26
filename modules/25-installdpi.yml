@@ -4,11 +4,14 @@ commands:
   - chmod +x /antidpi/service.sh
   - chmod +x /antidpi/nfqws_x64
   - chmod +x /antidpi/dpi
+  - chmod +x /antidpi/build-dpi
   - chmod +x /antidpi/customize.sh
   - mv /antidpi/service.sh /etc/init.d/antidpi-service
   - mv /antidpi/nfqws_x64 /bin/nfqws
   - mv /antidpi/dpi /bin/dpi
+  - mv /antidpi/build-dpi /bin/builddpi
   - rm -rf /antidpi
   - curl -L -o /etc/DPI_list.txt https://github.com/1andrevich/Re-filter-lists/releases/latest/download/domains_all.lst
-  - /bin/dpi start
+  - /bin/builddpi start
+  - rm /bin/builddpi
   - update-rc.d antidpi-service defaults
