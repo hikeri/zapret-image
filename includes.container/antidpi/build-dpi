@@ -82,7 +82,7 @@ echo "Warning: use hoslist is disabled";
 fi; 
 for site in $1; 
 do 
-if [ "$(grep -Ec "^$site" "$dpi_list_path/$dpi_list")" == "0" ]; 
+if [ "$(grep -Ec "^$site" "$dpi_list_path/$dpi_list")" = "0" ]; 
 then 
 echo "$site" >> $dpi_list_path/$dpi_list; 
 fi; 
@@ -112,7 +112,7 @@ NFQWS_OPT="$(echo $DesyncHTTP $Desync1 $Desync2 $Desync3 $Desync4 $Desync5 $Desy
 fi;
 
 #Auto hostlist  
-if [ "$uselist" == "1" ]; 
+if [ "$uselist" = "1" ]; 
 then 
 echo "Using auto hostlist";
 if ! [ -e "$dpi_list_path/$dpi_ignore" ]; 
@@ -122,7 +122,7 @@ chmod 666 "$dpi_list_path/$dpi_ignore";
 fi; 
 HOSTLIST="--hostlist-auto=$dpi_list_path/$dpi_list --hostlist-exclude=$dpi_list_path/$dpi_ignore"; 
 HOSTLIST_NOAUTO="--hostlist=$dpi_list_path/$dpi_list --hostlist-exclude=$dpi_list_path/$dpi_ignore"; 
-if [ "AUTOHOSTLIST_DEBUGLOG" == "1" ];
+if [ "AUTOHOSTLIST_DEBUGLOG" = "1" ];
 then 
 HOSTLIST="$HOSTLIST --hostlist-auto-debug=$dpi_list_path/$dpi_list_debug";
 fi 
@@ -149,14 +149,14 @@ fi
 #Fix config <HOSTLIST> -> $HOSTLIST
 NFQWS_OPT="$(echo $NFQWS_OPT | sed -e "s|<HOSTLIST_NOAUTO>|$HOSTLIST_NOAUTO|g" -e "s|<HOSTLIST>|$HOSTLIST|g")";
 
-if [ "$debug" == "1" ]; 
+if [ "$debug" = "1" ]; 
 then 
 echo "Debug all Desync: $NFQWS_OPT" > $dpi_list_path/DPI_logS.txt; 
 fi;
 fi;
 
 #Import internal hostlist
-if ! [ -e "$dpi_list_path/$dpi_list" ] && [ "$uselist" == "1" ]; 
+if ! [ -e "$dpi_list_path/$dpi_list" ] && [ "$uselist" = "1" ]; 
 then 
 addHlist "$importHostList";
 fi;
@@ -203,7 +203,7 @@ fi;
 
 
 #NetFilter rules
-if [ "$uselist" == "1" ]; 
+if [ "$uselist" = "1" ]; 
 then 
 sysctl net.netfilter.nf_conntrack_tcp_be_liberal=1 > /dev/null; 
 fi; 
@@ -225,7 +225,7 @@ then
 NFQWS_PORTS_TCP="$(echo $NFQWS_OPT | grep -oE 'filter-tcp=[0-9,-]+' | sed -e 's/.*=//g' -e 's/,/\n/g' | sort -un)";
 NFQWS_PORTS_UDP="$(echo $NFQWS_OPT | grep -oE 'filter-udp=[0-9,-]+' | sed -e 's/.*=//g' -e 's/,/\n/g' | sort -un)";
 fi;
-if [ "$debug" == "1" ]; 
+if [ "$debug" = "1" ]; 
 then 
 echo "Debug tcp ports: $NFQWS_PORTS_TCP" >> $dpi_list_path/DPI_logS.txt;
 echo "Debug udp ports: $NFQWS_PORTS_UDP" >> $dpi_list_path/DPI_logS.txt;
@@ -234,14 +234,14 @@ fi;
 
 #Add port to iptables 
 iptAdd() { 
-if [ "$debug" == "1" ]; 
+if [ "$debug" = "1" ]; 
 then 
 echo "Debug ipt_Add tcp/udp: $1 PortNum: $2" >> $dpi_list_path/DPI_logS.txt; 
 fi;
 
 ippo=$(echo "$oifnm -p  $iMportD $2 $iCBo $iMark" | sed 's/  / /g');
 iptables -t $iptname -I POSTROUTING $ippo -j NFQUEUE --queue-num 200 --queue-bypass
-if [ "$uselist" == "1" ]; 
+if [ "$uselist" = "1" ]; 
 then 
 ippre=$(echo "$iifnm -p  $iMportS $2 $iCBr $iMark" | sed 's/  / /g');
 iptables -t $iptname -I PREROUTING $ippre -j NFQUEUE --queue-num 200 --queue-bypass
@@ -277,13 +277,13 @@ nft create table $nftname;
 nft add chain $nftname post "{type filter hook postrouting priority mangle;}";
 if [ -n "$NFQWS_PORTS_TCP" ];
 then
-nft add rule $nftname post $oifnm tcp dport "{ $(echo $NFQWS_PORTS_TCP | sed 's/ /,/g') }" ct original packets 1-12 meta mark and 0x40000000 == 0 queue num 200 bypass;
+nft add rule $nftname post $oifnm tcp dport "{ $(echo $NFQWS_PORTS_TCP | sed 's/ /,/g') }" ct original packets 1-12 meta mark and 0x40000000 = 0 queue num 200 bypass;
 fi 
 if [ -n "$NFQWS_PORTS_UDP" ];
 then
-nft add rule $nftname post $oifnm udp dport "{ $(echo $NFQWS_PORTS_UDP | sed 's/ /,/g') }" ct original packets 1-12 meta mark and 0x40000000 == 0 queue num 200 bypass;
+nft add rule $nftname post $oifnm udp dport "{ $(echo $NFQWS_PORTS_UDP | sed 's/ /,/g') }" ct original packets 1-12 meta mark and 0x40000000 = 0 queue num 200 bypass;
 fi
-if [ "$uselist" == "1" ]; then 
+if [ "$uselist" = "1" ]; then 
 nft add chain $nftname pre "{type filter hook prerouting priority filter;}";
 if [ -n "$NFQWS_PORTS_TCP" ];
 then
@@ -296,7 +296,7 @@ fi;
 fi; 
 
 #Debug nftables 
-if [ "$debug" == "1" ]; 
+if [ "$debug" = "1" ]; 
 then 
 echo "Debug nftales" >> $dpi_list_path/DPI_logS.txt; 
 nft list table $nftname >> $dpi_list_path/DPI_logS.txt; 
@@ -304,7 +304,7 @@ fi;
 
 else 
 echo "Using iptables"; 
-if [ "$(cat /proc/net/ip_tables_targets | grep -c 'NFQUEUE')" == "0" ]; 
+if [ "$(cat /proc/net/ip_tables_targets | grep -c 'NFQUEUE')" = "0" ]; 
 then
 echo "Error - very bad iptables, script will not work"; 
 exit
@@ -352,7 +352,7 @@ fi
 
 
 #Debug iptables 
-if [ "$debug" == "1" ]; 
+if [ "$debug" = "1" ]; 
 then 
 echo "Debug iptables" >> $dpi_list_path/DPI_logS.txt; 
 iptables -t $iptname -L >> $dpi_list_path/DPI_logS.txt; 
@@ -361,7 +361,7 @@ fi;
 fi;
 
 #Starting nfqws
-if [ "$debug" == "1" ]; 
+if [ "$debug" = "1" ]; 
 then 
 ndebug="--debug=@$dpi_list_path/DPI_logN.txt"; 
 else 
@@ -371,7 +371,7 @@ echo "Starting nfqws";
 if [ -e "$dpi_list_path/$dpi_config" ]; 
 then 
 #Check nfqws main options in config 
-if [ "$(cat $dpi_list_path/$dpi_config | grep -c 'qnum=')" == "0" ];
+if [ "$(cat $dpi_list_path/$dpi_config | grep -c 'qnum=')" = "0" ];
 then
 sed -i "1s/^/$ndebug --daemon --uid=0:0 --qnum=200 \n/" "$dpi_list_path/$dpi_config"
 fi
@@ -402,7 +402,7 @@ iptables -t $iptname -F PREROUTING;
 iptables -t $iptname -F POSTROUTING; 
 fi; 
 kill "$(pidof nfqws)";
-if [ "$debug" == "1" ]; 
+if [ "$debug" = "1" ]; 
 then 
 echo "Stop service" >> $dpi_list_path/DPI_logS.txt; 
 fi;
