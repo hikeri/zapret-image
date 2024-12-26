@@ -277,11 +277,11 @@ nft create table $nftname;
 nft add chain $nftname post "{type filter hook postrouting priority mangle;}";
 if [ -n "$NFQWS_PORTS_TCP" ];
 then
-nft add rule $nftname post $oifnm tcp dport "{ $(echo $NFQWS_PORTS_TCP | sed 's/ /,/g') }" ct original packets 1-12 meta mark and 0x40000000 = 0 queue num 200 bypass;
+nft add rule $nftname post $oifnm tcp dport "{ $(echo $NFQWS_PORTS_TCP | sed 's/ /,/g') }" ct original packets 1-12 meta mark and 0x40000000 == 0 queue num 200 bypass;
 fi 
 if [ -n "$NFQWS_PORTS_UDP" ];
 then
-nft add rule $nftname post $oifnm udp dport "{ $(echo $NFQWS_PORTS_UDP | sed 's/ /,/g') }" ct original packets 1-12 meta mark and 0x40000000 = 0 queue num 200 bypass;
+nft add rule $nftname post $oifnm udp dport "{ $(echo $NFQWS_PORTS_UDP | sed 's/ /,/g') }" ct original packets 1-12 meta mark and 0x40000000 == 0 queue num 200 bypass;
 fi
 if [ "$uselist" = "1" ]; then 
 nft add chain $nftname pre "{type filter hook prerouting priority filter;}";
