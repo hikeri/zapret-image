@@ -23,11 +23,6 @@ stages:
 
   # Put your custom actions below this comment
 
-  - name: iptables purge
-    type: shell
-    commands:
-    - apt-get purge iptables -y
-
   - name: enable-antidpi # Sample module demonstrating importing local and remote modules
     type: includes
     includes:
